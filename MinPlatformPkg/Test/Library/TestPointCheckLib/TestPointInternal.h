@@ -26,6 +26,7 @@ typedef struct {
   TEST_POINT_SMM_COMMUNICATION_HEADER  Header;
   UINT64                               UefiMemoryMapOffset;
   UINT64                               UefiMemoryMapSize;
+  UINT64                               UefiDescriptorSize;
   UINT64                               GcdMemoryMapOffset;
   UINT64                               GcdMemoryMapSize;
   UINT64                               GcdIoMapOffset;

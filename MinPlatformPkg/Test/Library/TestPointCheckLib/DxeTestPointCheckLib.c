@@ -554,18 +554,26 @@ TestPointDxeSmmReadyToBootSmmPageProtection (
   DEBUG ((DEBUG_INFO, "======== TestPointDxeSmmReadyToBootSmmPageProtection - Enter\n"));
 
   TestPointDumpUefiMemoryMap (&UefiMemoryMap, &UefiMemoryMapSize, &UefiDescriptorSize, FALSE);
+  DEBUG ((DEBUG_INFO, "UEFI Memory Map Size: %lu, Descriptor Size: %lu\n", UefiMemoryMapSize, UefiDescriptorSize));
+
   TestPointDumpGcd (&GcdMemoryMap, &GcdMemoryMapNumberOfDescriptors, &GcdIoMap, &GcdIoMapNumberOfDescriptors, FALSE);
+  DEBUG ((DEBUG_INFO, "GCD Memory Map Count: %lu, GCD IO Map Count: %lu\n", GcdMemoryMapNumberOfDescriptors, GcdIoMapNumberOfDescriptors));
 
   MemoryAttributesTable = NULL;
   MemoryAttributesTableSize = 0;
   Status = EfiGetSystemConfigurationTable (&gEfiMemoryAttributesTableGuid, (VOID **)&MemoryAttributesTable);
   if (!EFI_ERROR (Status)) {
-    MemoryAttributesTableSize = sizeof(EFI_MEMORY_ATTRIBUTES_TABLE) + MemoryAttributesTable->DescriptorSize * MemoryAttributesTable->NumberOfEntries;
+    MemoryAttributesTableSize = sizeof(EFI_MEMORY_ATTRIBUTES_TABLE) +
+                                MemoryAttributesTable->DescriptorSize * MemoryAttributesTable->NumberOfEntries;
+    DEBUG ((DEBUG_INFO, "MemoryAttributesTable found, Size: %lu, Entries: %u, DescriptorSize: %u\n",
+            MemoryAttributesTableSize, MemoryAttributesTable->NumberOfEntries, MemoryAttributesTable->DescriptorSize));
+  } else {
+    DEBUG ((DEBUG_INFO, "MemoryAttributesTable not found: %r\n", Status));
   }
 
   Status = gBS->LocateProtocol(&gEfiSmmCommunicationProtocolGuid, NULL, (VOID **)&SmmCommunication);
   if (EFI_ERROR(Status)) {
-    DEBUG ((DEBUG_INFO, "TestPointDxeSmmReadyToBootSmmPageProtection: Locate SmmCommunication protocol - %r\n", Status));
+    DEBUG ((DEBUG_INFO, "Locate SmmCommunication protocol - %r\n", Status));
     return EFI_SUCCESS;
   }
 
@@ -576,6 +584,8 @@ TestPointDxeSmmReadyToBootSmmPageProtection (
                       GcdIoMapNumberOfDescriptors * sizeof(EFI_GCD_IO_SPACE_DESCRIPTOR) +
                       MemoryAttributesTableSize;
 
+  DEBUG ((DEBUG_INFO, "Calculated MinimalSizeNeeded: %lu bytes\n", MinimalSizeNeeded));
+
   Status = EfiGetSystemConfigurationTable(
              &gEdkiiPiSmmCommunicationRegionTableGuid,
              (VOID **)&PiSmmCommunicationRegionTable
@@ -585,16 +595,27 @@ TestPointDxeSmmReadyToBootSmmPageProtection (
     return EFI_SUCCESS;
   }
   ASSERT(PiSmmCommunicationRegionTable != NULL);
+
+  DEBUG ((DEBUG_INFO, "PiSmmCommunicationRegionTable NumberOfEntries: %u, DescriptorSize: %u\n",
+          PiSmmCommunicationRegionTable->NumberOfEntries,
+          PiSmmCommunicationRegionTable->DescriptorSize));
+          
   Entry = (EFI_MEMORY_DESCRIPTOR *)(PiSmmCommunicationRegionTable + 1);
   Size = 0;
   for (Index = 0; Index < PiSmmCommunicationRegionTable->NumberOfEntries; Index++) {
     if (Entry->Type == EfiConventionalMemory) {
       Size = EFI_PAGES_TO_SIZE((UINTN)Entry->NumberOfPages);
+      DEBUG ((DEBUG_INFO, "Entry %u: Type=%u, Start=0x%lx, Pages=%lu, Size=%lu bytes\n",
+            Index, Entry->Type, Entry->PhysicalStart, Entry->NumberOfPages, Size));
       if (Size >= MinimalSizeNeeded) {
+        DEBUG ((DEBUG_INFO, "Selected Entry %u for SMM communication buffer\n", Index));
         break;
       }
     }
     Entry = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)Entry + PiSmmCommunicationRegionTable->DescriptorSize);
+  }
+  if (Index >= PiSmmCommunicationRegionTable->NumberOfEntries) {
+    DEBUG ((DEBUG_ERROR, "No SMM communication region large enough for MinimalSizeNeeded: %lu bytes\n", MinimalSizeNeeded));
   }
   ASSERT(Index < PiSmmCommunicationRegionTable->NumberOfEntries);
   CommBuffer = (UINT8 *)(UINTN)Entry->PhysicalStart;
@@ -609,6 +630,7 @@ TestPointDxeSmmReadyToBootSmmPageProtection (
   CommData->Header.Size         = CommHeader->MessageLength;
   CommData->UefiMemoryMapOffset = sizeof(TEST_POINT_SMM_COMMUNICATION_UEFI_GCD_MAP_INFO);
   CommData->UefiMemoryMapSize   = UefiMemoryMapSize;
+  CommData->UefiDescriptorSize  = UefiDescriptorSize;
   CommData->GcdMemoryMapOffset  = CommData->UefiMemoryMapOffset + CommData->UefiMemoryMapSize;
   CommData->GcdMemoryMapSize    = GcdMemoryMapNumberOfDescriptors * sizeof(EFI_GCD_MEMORY_SPACE_DESCRIPTOR);
   CommData->GcdIoMapOffset      = CommData->GcdMemoryMapOffset + CommData->GcdMemoryMapSize;

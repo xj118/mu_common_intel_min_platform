@@ -239,7 +239,7 @@ TestPointReadyToBootMmPageProtectionHandler (
     Status = TestPointCheckMmCommunicationBuffer (
                (EFI_MEMORY_DESCRIPTOR *)(UINTN)((UINTN)CommData + CommData->UefiMemoryMapOffset),
                (UINTN)CommData->UefiMemoryMapSize,
-               mUefiDescriptorSize,
+               (UINTN)CommData->UefiDescriptorSize,
                (CommData->UefiMemoryAttributeTableSize != 0) ? (EFI_MEMORY_ATTRIBUTES_TABLE *)(UINTN)((UINTN)CommData + CommData->UefiMemoryAttributeTableOffset) : NULL
                );
     if (EFI_ERROR (Status)) {
